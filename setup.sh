@@ -62,17 +62,20 @@ jobs:
         python -m py_compile app.py
 EOF
 
-# 5. Create app.py
+# 5. Create app.py with Streamlit Cloud permission fix
 echo "Creating app.py..."
 cat << 'EOF' > app.py
-import streamlit as st
-import pandas as pd
+import os
+import shutil
 import time
 import io
 from urllib.parse import quote_plus
+import streamlit as st
+import pandas as pd
 import chromedriver_autoinstaller
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from bs4 import BeautifulSoup
 
 st.set_page_config(
@@ -81,9 +84,8 @@ st.set_page_config(
     layout="wide"
 )
 
-@st.cache_resource
-def init_driver():
-    chromedriver_autoinstaller.install()
+def get_driver():
+    """Setup Headless Chrome compatible with Streamlit Community Cloud and local environments."""
     options = Options()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
@@ -94,12 +96,31 @@ def init_driver():
         "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     )
-    return options
 
-def scrape_dell_official(driver_options, target_count):
+    # Check for system Chromium binary (Streamlit Cloud via packages.txt)
+    chromium_path = shutil.which("chromium") or shutil.which("chromium-browser")
+    if chromium_path:
+        options.binary_location = chromium_path
+
+    # Check for system ChromeDriver binary
+    driver_path = shutil.which("chromedriver") or "/usr/bin/chromedriver"
+    if os.path.exists(driver_path):
+        service = Service(executable_path=driver_path)
+        return webdriver.Chrome(service=service, options=options)
+
+    # Fallback for local development (download to user-writable /tmp folder)
+    try:
+        installed_path = chromedriver_autoinstaller.install(path="/tmp")
+        service = Service(executable_path=installed_path)
+        return webdriver.Chrome(service=service, options=options)
+    except Exception as e:
+        st.error(f"Failed to initialize ChromeDriver: {e}")
+        raise e
+
+def scrape_dell_official(target_count):
     results = []
     url = "https://www.dell.com/en-us/search/dell%20desktop%20i9%201tb%20nvme%20windows%2011"
-    driver = webdriver.Chrome(options=driver_options)
+    driver = get_driver()
     try:
         driver.get(url)
         time.sleep(4)
@@ -130,11 +151,11 @@ def scrape_dell_official(driver_options, target_count):
         driver.quit()
     return results
 
-def scrape_google_shopping(driver_options, target_count):
+def scrape_google_shopping(target_count):
     results = []
     search_query = quote_plus("DELL Desktop Core i9 1TB NVMe Windows 11")
     url = f"https://www.google.com/search?tbm=shop&q={search_query}&hl=en&gl=us"
-    driver = webdriver.Chrome(options=driver_options)
+    driver = get_driver()
     try:
         driver.get(url)
         time.sleep(3)
@@ -183,15 +204,14 @@ with col2:
 
 if st.button("🚀 Start Market Price Scan", type="primary"):
     with st.spinner("Initializing Headless Web Driver and Scanning US Retailers..."):
-        driver_opts = init_driver()
         scraped_data = []
         
-        dell_results = scrape_dell_official(driver_opts, num_items)
+        dell_results = scrape_dell_official(num_items)
         scraped_data.extend(dell_results)
         
         remaining_count = num_items - len(scraped_data)
         if remaining_count > 0:
-            market_results = scrape_google_shopping(driver_opts, remaining_count)
+            market_results = scrape_google_shopping(remaining_count)
             scraped_data.extend(market_results)
             
     if scraped_data:
@@ -227,3 +247,5 @@ Streamlit web application that scans the US market for Dell Desktops with Intel 
 1. Install dependencies:
    ```bash
    pip install -r requirements.txt
+  
+EOF

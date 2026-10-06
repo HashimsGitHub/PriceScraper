@@ -7,3 +7,4 @@ Streamlit web application that scans the US market for Dell Desktops with Intel 
 1. Install dependencies:
    ```bash
    pip install -r requirements.txt
+  
