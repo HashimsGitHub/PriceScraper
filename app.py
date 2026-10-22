@@ -565,18 +565,20 @@ if search_runs:
             selected_products, template_options, existing_product_references()
         )
         if validation_errors:
-            st.error("Complete or correct the selected items before downloading:")
+            st.warning(
+                "Some selected items have blank or unverified template fields. "
+                "They will remain blank as appropriate; these warnings do not block export."
+            )
             for error in validation_errors:
                 st.write(f"- {error}")
-        else:
-            prestashop_excel = build_prestashop_workbook(selected_products)
-            st.download_button(
-                "Download PrestaShop_Product_Entry_Data.xlsx",
-                data=prestashop_excel,
-                file_name="PrestaShop_Product_Entry_Data.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="primary",
-            )
+        prestashop_excel = build_prestashop_workbook(selected_products)
+        st.download_button(
+            "Download PrestaShop_Product_Entry_Data.xlsx",
+            data=prestashop_excel,
+            file_name="PrestaShop_Product_Entry_Data.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
+        )
     else:
         st.caption("Select one or more results and complete the required product fields to export.")
 else:
